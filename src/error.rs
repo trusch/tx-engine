@@ -5,7 +5,6 @@ pub enum Error {
     JoinError(tokio::task::JoinError),
     InsufficientFunds,
     AccountLocked,
-    KVError(kv::Error),
     NotFound,
 }
 
@@ -21,7 +20,6 @@ impl std::fmt::Display for Error {
             Self::IOError(ref e) => write!(f, "io error: {}", e),
             Self::JoinError(ref e) => write!(f, "join error: {}", e),
             Self::AccountLocked => write!(f, "account locked"),
-            Self::KVError(ref e) => write!(f, "kv error: {}", e),
             Self::NotFound => write!(f, "not found"),
         }
     }
@@ -39,8 +37,3 @@ impl From<tokio::task::JoinError> for Error {
     }
 }
 
-impl From<kv::Error> for Error {
-    fn from(err: kv::Error) -> Self {
-        Self::KVError(err)
-    }
-}

@@ -119,3 +119,14 @@ impl From<Account> for AccountRow {
         }
     }
 }
+
+impl Default for Transaction {
+    fn default() -> Self {
+        Self {
+            type_: TxType::Deposit,
+            client: 0,
+            tx: 0,
+            amount: None,
+        }
+    }
+}

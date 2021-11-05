@@ -79,14 +79,15 @@ async fn main() -> Result<()> {
     let processing_task = tokio::spawn(async move {
         // store and process transactions
         for tx in rx {
-            // store the transaction
-            match tx_store.lock().await.set(tx.tx, tx.clone()) {
-                Ok(_) => {}
-                Err(e) => {
-                    eprintln!("Error storing transaction: {}", e);
-                }
-            };
-
+            // store the transaction if its a deposit or withdrawal
+            if tx.type_== TxType::Deposit || tx.type_== TxType::Withdrawal {
+                match tx_store.lock().await.set(tx.tx, tx.clone()) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        eprintln!("Error storing transaction: {}", e);
+                    }
+                };
+            }
             // update account balances
             match account_manager.process_transaction(tx).await {
                 Ok(()) => {}

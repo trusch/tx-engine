@@ -54,8 +54,13 @@ where
                 let tx_store = self.transactions.lock().await;
                 let source_tx = tx_store.get(tx.tx)?;
                 if let Some(amount) = source_tx.amount {
+                    // we can only held money back that is still in our system
                     if source_tx.type_ == TxType::Deposit {
-                        // we can only held money back that is still in our system
+                        // we can only hold back as much money as there is in the account
+                        let mut amount = amount;
+                        if amount > account.available {
+                            amount = account.available;
+                        }
                         account.held += amount;
                         account.available -= amount;
                     }
@@ -65,8 +70,13 @@ where
                 let tx_store = self.transactions.lock().await;
                 let source_tx = tx_store.get(tx.tx)?;
                 if let Some(amount) = source_tx.amount {
+                    // we can release money back that is still in our system
                     if source_tx.type_ == TxType::Deposit {
-                        // we can release money back that is still in our system
+                        // we can only hold back as much money as there is in the account
+                        let mut amount = amount;
+                        if amount > account.held {
+                            amount = account.held;
+                        }
                         account.held -= amount;
                         account.available += amount;
                     }
@@ -76,8 +86,13 @@ where
                 let tx_store = self.transactions.lock().await;
                 let source_tx = tx_store.get(tx.tx)?;
                 if let Some(amount) = source_tx.amount {
+                    // we can only held money back that is still in our system
                     if source_tx.type_ == TxType::Deposit {
-                        // we can only held money back that is still in our system
+                        let mut amount = amount;
+                        if amount > account.held {
+                            // we can only take as money as we find in the account
+                            amount = account.held;
+                        }
                         account.held -= amount;
                         account.total -= amount;
                         account.locked = true;
@@ -110,4 +125,140 @@ where
     async fn set_account(&mut self, account: Account) -> Result<()>{
         self.accounts.lock().await.set(account.id, account)
     }
+}
+
+mod tests {
+    use crate::storage::InMemoryKVStore;
+
+    use super::*;
+    #[tokio::test]
+    
+    async fn test_process_transaction() -> Result<()>{
+        let account_store = Arc::new(Mutex::new(InMemoryKVStore::<ClientID, Account>::new()?));
+        let tx_store = Arc::new(Mutex::new(
+            InMemoryKVStore::<TransactionID, Transaction>::new()?,
+        ));    
+
+        let mut mgr = Manager::new(account_store.clone(), tx_store.clone());
+
+        // deposit
+        {
+            let tx = Transaction {
+                tx: 1,
+                client: 1,
+                type_: TxType::Deposit,
+                amount: Some(100),
+            };
+            tx_store.lock().await.set(1, tx.clone())?;
+
+            mgr.process_transaction(tx).await?;
+    
+            let store = account_store.lock().await;
+            let account = store.get(1)?;
+            assert_eq!(account.available, 100);
+            assert_eq!(account.total, 100);
+            assert_eq!(account.held, 0);
+            assert_eq!(account.locked, false);
+        }
+
+        // withdrawal
+        {
+            let tx = Transaction {
+                tx: 2,
+                client: 1,
+                type_: TxType::Withdrawal,
+                amount: Some(50),
+            };
+            tx_store.lock().await.set(2, tx.clone())?;
+            
+            mgr.process_transaction(tx).await?;
+    
+            let store = account_store.lock().await;
+            let account = store.get(1)?;
+            assert_eq!(account.available, 50);
+            assert_eq!(account.total, 50);
+            assert_eq!(account.held, 0);
+            assert_eq!(account.locked, false);
+        }
+
+        // dispute
+        {
+            let tx = Transaction {
+                tx: 1,
+                client: 1,
+                type_: TxType::Dispute,
+                amount: None,
+            };
+            
+            mgr.process_transaction(tx).await?;
+
+            let store = account_store.lock().await;
+            let account = store.get(1)?;
+            assert_eq!(account.available, 0);
+            assert_eq!(account.total, 50);
+            assert_eq!(account.held, 50);
+            assert_eq!(account.locked, false);
+        }
+
+        // resolve
+        {
+            let tx = Transaction {
+                tx: 1,
+                client: 1,
+                type_: TxType::Resolve,
+                amount: None,
+            };
+            
+            mgr.process_transaction(tx).await?;
+
+            let store = account_store.lock().await;
+            let account = store.get(1)?;
+            assert_eq!(account.available, 50);
+            assert_eq!(account.total, 50);
+            assert_eq!(account.held, 0);
+            assert_eq!(account.locked, false);
+        }
+
+        // dispute again
+        {
+            let tx = Transaction {
+                tx: 1,
+                client: 1,
+                type_: TxType::Dispute,
+                amount: None,
+            };
+            
+            mgr.process_transaction(tx).await?;
+
+            let store = account_store.lock().await;
+            let account = store.get(1)?;
+            assert_eq!(account.available, 0);
+            assert_eq!(account.total, 50);
+            assert_eq!(account.held, 50);
+            assert_eq!(account.locked, false);
+        }
+
+        // chargeback
+        {
+            let tx = Transaction {
+                tx: 1,
+                client: 1,
+                type_: TxType::Chargeback,
+                amount: None,
+            };
+            
+            mgr.process_transaction(tx).await?;
+
+            let store = account_store.lock().await;
+            let account = store.get(1)?;
+            assert_eq!(account.available, 0);
+            assert_eq!(account.total, 0);
+            assert_eq!(account.held, 0);
+            assert_eq!(account.locked, true);
+        }
+        
+        
+        Ok(())
+    }
+    
 }
