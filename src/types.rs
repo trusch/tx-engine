@@ -38,7 +38,7 @@ pub struct AccountRow {
     pub locked: bool,
 }
 
-// This is the interal representation of transactions
+// This is the internal representation of transactions
 // The actual amount is saved as a u64 to prevent precision loss when calculating
 // the amount here is the the actual amount as seen in the csv * 10000
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -50,7 +50,7 @@ pub struct Transaction {
     pub amount: Option<u64>,
 }
 
-// This is the interal representation of accounts
+// This is the internal representation of accounts
 // The actual amounts are saved as a u64 to prevent precision loss when calculating
 // the amount here is the the actual amount as seen in the csv * 10000
 #[derive(Debug, Clone, Deserialize, Serialize)]
