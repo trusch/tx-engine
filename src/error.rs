@@ -1,8 +1,8 @@
 #[derive(Debug)]
 pub enum Error {
     InvalidArguments,
-    IOError(std::io::Error),
-    JoinError(tokio::task::JoinError),
+    IO(std::io::Error),
+    Join(tokio::task::JoinError),
     InsufficientFunds,
     AccountLocked,
     NotFound,
@@ -17,8 +17,8 @@ impl std::fmt::Display for Error {
         match *self {
             Self::InvalidArguments => write!(f, "invalid arguments"),
             Self::InsufficientFunds => write!(f, "insufficient funds"),
-            Self::IOError(ref e) => write!(f, "io error: {}", e),
-            Self::JoinError(ref e) => write!(f, "join error: {}", e),
+            Self::IO(ref e) => write!(f, "io error: {}", e),
+            Self::Join(ref e) => write!(f, "join error: {}", e),
             Self::AccountLocked => write!(f, "account locked"),
             Self::NotFound => write!(f, "not found"),
         }
@@ -27,12 +27,12 @@ impl std::fmt::Display for Error {
 
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
-        Self::IOError(err)
+        Self::IO(err)
     }
 }
 
 impl From<tokio::task::JoinError> for Error {
     fn from(err: tokio::task::JoinError) -> Self {
-        Self::JoinError(err)
+        Self::Join(err)
     }
 }

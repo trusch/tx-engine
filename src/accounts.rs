@@ -7,6 +7,8 @@ use crate::{
     types::{Account, ClientID, Transaction, TransactionID, TxType},
 };
 
+// This account manager processes all transactions and updates the accounts
+// it's generic over the storage types for the accounts and for the transactions
 #[derive(Debug)]
 pub struct Manager<A, T>
 where
@@ -29,18 +31,22 @@ where
         }
     }
 
+    // process_transaction implements the main business logic of this application
     pub async fn process_transaction(&mut self, tx: Transaction) -> Result<()> {
         let mut account = self.get_account(tx.client).await?;
         if account.locked {
             return Err(Error::AccountLocked);
         }
         match tx.type_ {
+            // Deposit -> add the amount to the balance
             TxType::Deposit => {
                 if let Some(amount) = tx.amount {
                     account.available += amount;
                     account.total += amount;
                 }
             }
+
+            // Withdraw -> subtract the amount from the balance
             TxType::Withdrawal => {
                 if let Some(amount) = tx.amount {
                     if account.available < amount {
@@ -50,6 +56,9 @@ where
                     account.total -= amount;
                 }
             }
+
+            // Dispute -> the referenced transaction is about to be reversed
+            // if the disputed transaction is a deposit, the amount in question is freezed by moving it into the held balance
             TxType::Dispute => {
                 let tx_store = self.transactions.lock().await;
                 let source_tx = tx_store.get(tx.tx)?;
@@ -66,6 +75,8 @@ where
                     }
                 }
             }
+
+            // Reverse -> the dispute is resolved and the held balance is moved back into the available balance
             TxType::Resolve => {
                 let tx_store = self.transactions.lock().await;
                 let source_tx = tx_store.get(tx.tx)?;
@@ -82,6 +93,11 @@ where
                     }
                 }
             }
+
+            // Chargeback -> the referenced transaction should be reversed
+            // if the disputed transaction is a deposit, the amount in question is finally subtracted from the held balance
+            // if the disputed transaction is a withdrawal, the amount in question is added to the available balance from thin air
+            // (The assumption is that disputes and chargebacks are always executed in matching pairs so that no balances are created or destroyed)
             TxType::Chargeback => {
                 let tx_store = self.transactions.lock().await;
                 let source_tx = tx_store.get(tx.tx)?;
@@ -109,29 +125,31 @@ where
         Ok(())
     }
 
+    // get_account returns the account for the given client id.
+    // If the account does not exist, it is created and returned.
     async fn get_account(&mut self, client: ClientID) -> Result<Account> {
         let mut accounts = self.accounts.lock().await;
         match accounts.get(client) {
             Ok(account) => Ok(account.clone()),
             Err(_) => {
-                let mut account = Account::default();
-                account.id = client;
+                let account = Account::new(client);
                 accounts.set(client, account)?;
                 Ok(accounts.get(client)?.clone())
             }
         }
     }
 
+    // set_account sets the given account for the given client id to the new value.
     async fn set_account(&mut self, account: Account) -> Result<()> {
         self.accounts.lock().await.set(account.id, account)
     }
 }
 
 mod tests {
-    use crate::storage::InMemoryKVStore;
-
     use super::*;
 
+    use crate::InMemoryKVStore;
+    
     #[tokio::test]
     async fn test_process_transaction_basic() -> Result<()> {
         let account_store = Arc::new(Mutex::new(InMemoryKVStore::<ClientID, Account>::new()?));
@@ -259,7 +277,7 @@ mod tests {
 
         Ok(())
     }
-    
+
     #[tokio::test]
     async fn test_process_transaction_cant_withdraw_more_than_available() -> Result<()> {
         let account_store = Arc::new(Mutex::new(InMemoryKVStore::<ClientID, Account>::new()?));
@@ -269,14 +287,17 @@ mod tests {
         ));
 
         let mut mgr = Manager::new(account_store.clone(), tx_store.clone());
-        
-        account_store.lock().await.set(1, Account {
-            id: 1,
-            available: 100,
-            total: 100,
-            held: 0,
-            locked: false,
-        })?;
+
+        account_store.lock().await.set(
+            1,
+            Account {
+                id: 1,
+                available: 100,
+                total: 100,
+                held: 0,
+                locked: false,
+            },
+        )?;
 
         // withdrawal
         {
@@ -311,14 +332,17 @@ mod tests {
         ));
 
         let mut mgr = Manager::new(account_store.clone(), tx_store.clone());
-        
-        account_store.lock().await.set(1, Account {
-            id: 1,
-            available: 100,
-            total: 100,
-            held: 0,
-            locked: true,
-        })?;
+
+        account_store.lock().await.set(
+            1,
+            Account {
+                id: 1,
+                available: 100,
+                total: 100,
+                held: 0,
+                locked: true,
+            },
+        )?;
 
         // withdrawal
         {
@@ -345,7 +369,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_process_transaction_dispute_on_deposit_holds_back_no_more_than_available() -> Result<()> {
+    async fn test_process_transaction_dispute_on_deposit_holds_back_no_more_than_available(
+    ) -> Result<()> {
         let account_store = Arc::new(Mutex::new(InMemoryKVStore::<ClientID, Account>::new()?));
 
         let tx_store = Arc::new(Mutex::new(
@@ -353,21 +378,27 @@ mod tests {
         ));
 
         let mut mgr = Manager::new(account_store.clone(), tx_store.clone());
-        
-        account_store.lock().await.set(1, Account {
-            id: 1,
-            available: 50,
-            total: 50,
-            held: 0,
-            locked: false,
-        })?;
 
-        tx_store.lock().await.set(1, Transaction {
-            tx: 1,
-            client: 1,
-            type_: TxType::Deposit,
-            amount: Some(100),
-        })?;
+        account_store.lock().await.set(
+            1,
+            Account {
+                id: 1,
+                available: 50,
+                total: 50,
+                held: 0,
+                locked: false,
+            },
+        )?;
+
+        tx_store.lock().await.set(
+            1,
+            Transaction {
+                tx: 1,
+                client: 1,
+                type_: TxType::Deposit,
+                amount: Some(100),
+            },
+        )?;
 
         // dispute
         {
@@ -392,7 +423,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_process_transaction_dispute_on_withdrawal_doesnt_hold_back_anything() -> Result<()> {
+    async fn test_process_transaction_dispute_on_withdrawal_doesnt_hold_back_anything() -> Result<()>
+    {
         let account_store = Arc::new(Mutex::new(InMemoryKVStore::<ClientID, Account>::new()?));
 
         let tx_store = Arc::new(Mutex::new(
@@ -400,21 +432,27 @@ mod tests {
         ));
 
         let mut mgr = Manager::new(account_store.clone(), tx_store.clone());
-        
-        account_store.lock().await.set(1, Account {
-            id: 1,
-            available: 50,
-            total: 50,
-            held: 0,
-            locked: false,
-        })?;
 
-        tx_store.lock().await.set(1, Transaction {
-            tx: 1,
-            client: 1,
-            type_: TxType::Withdrawal,
-            amount: Some(100),
-        })?;
+        account_store.lock().await.set(
+            1,
+            Account {
+                id: 1,
+                available: 50,
+                total: 50,
+                held: 0,
+                locked: false,
+            },
+        )?;
+
+        tx_store.lock().await.set(
+            1,
+            Transaction {
+                tx: 1,
+                client: 1,
+                type_: TxType::Withdrawal,
+                amount: Some(100),
+            },
+        )?;
 
         // dispute
         {

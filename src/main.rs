@@ -105,7 +105,7 @@ async fn main() -> Result<()> {
 
     // output final account state
     let mut writer = AsyncSerializer::from_writer(tokio::io::stdout());
-    let store = account_store.lock().await.clone(); // argh...
+    let store = account_store.lock().await.clone();
     for (_, account) in store.into_iter() {
         let row: AccountRow = account.into(); // convert from u64 to f64 to present account data in final format
         match writer.serialize(row).await {

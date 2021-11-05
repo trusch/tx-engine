@@ -62,6 +62,18 @@ pub struct Account {
     pub locked: bool,
 }
 
+impl Account {
+    pub fn new(id: ClientID) -> Account {
+        Account {
+            id,
+            available: 0,
+            held: 0,
+            total: 0,
+            locked: false,
+        }
+    }
+}
+
 impl Default for Account {
     fn default() -> Self {
         Self {
