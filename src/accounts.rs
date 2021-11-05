@@ -122,7 +122,7 @@ where
         }
     }
 
-    async fn set_account(&mut self, account: Account) -> Result<()>{
+    async fn set_account(&mut self, account: Account) -> Result<()> {
         self.accounts.lock().await.set(account.id, account)
     }
 }
@@ -132,12 +132,12 @@ mod tests {
 
     use super::*;
     #[tokio::test]
-    
-    async fn test_process_transaction() -> Result<()>{
+
+    async fn test_process_transaction() -> Result<()> {
         let account_store = Arc::new(Mutex::new(InMemoryKVStore::<ClientID, Account>::new()?));
         let tx_store = Arc::new(Mutex::new(
             InMemoryKVStore::<TransactionID, Transaction>::new()?,
-        ));    
+        ));
 
         let mut mgr = Manager::new(account_store.clone(), tx_store.clone());
 
@@ -152,7 +152,7 @@ mod tests {
             tx_store.lock().await.set(1, tx.clone())?;
 
             mgr.process_transaction(tx).await?;
-    
+
             let store = account_store.lock().await;
             let account = store.get(1)?;
             assert_eq!(account.available, 100);
@@ -170,9 +170,9 @@ mod tests {
                 amount: Some(50),
             };
             tx_store.lock().await.set(2, tx.clone())?;
-            
+
             mgr.process_transaction(tx).await?;
-    
+
             let store = account_store.lock().await;
             let account = store.get(1)?;
             assert_eq!(account.available, 50);
@@ -189,7 +189,7 @@ mod tests {
                 type_: TxType::Dispute,
                 amount: None,
             };
-            
+
             mgr.process_transaction(tx).await?;
 
             let store = account_store.lock().await;
@@ -208,7 +208,7 @@ mod tests {
                 type_: TxType::Resolve,
                 amount: None,
             };
-            
+
             mgr.process_transaction(tx).await?;
 
             let store = account_store.lock().await;
@@ -227,7 +227,7 @@ mod tests {
                 type_: TxType::Dispute,
                 amount: None,
             };
-            
+
             mgr.process_transaction(tx).await?;
 
             let store = account_store.lock().await;
@@ -246,7 +246,7 @@ mod tests {
                 type_: TxType::Chargeback,
                 amount: None,
             };
-            
+
             mgr.process_transaction(tx).await?;
 
             let store = account_store.lock().await;
@@ -256,9 +256,7 @@ mod tests {
             assert_eq!(account.held, 0);
             assert_eq!(account.locked, true);
         }
-        
-        
+
         Ok(())
     }
-    
 }

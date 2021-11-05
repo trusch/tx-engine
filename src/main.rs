@@ -80,7 +80,7 @@ async fn main() -> Result<()> {
         // store and process transactions
         for tx in rx {
             // store the transaction if its a deposit or withdrawal
-            if tx.type_== TxType::Deposit || tx.type_== TxType::Withdrawal {
+            if tx.type_ == TxType::Deposit || tx.type_ == TxType::Withdrawal {
                 match tx_store.lock().await.set(tx.tx, tx.clone()) {
                     Ok(_) => {}
                     Err(e) => {
