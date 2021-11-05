@@ -131,9 +131,9 @@ mod tests {
     use crate::storage::InMemoryKVStore;
 
     use super::*;
-    #[tokio::test]
 
-    async fn test_process_transaction() -> Result<()> {
+    #[tokio::test]
+    async fn test_process_transaction_basic() -> Result<()> {
         let account_store = Arc::new(Mutex::new(InMemoryKVStore::<ClientID, Account>::new()?));
         let tx_store = Arc::new(Mutex::new(
             InMemoryKVStore::<TransactionID, Transaction>::new()?,
@@ -255,6 +255,184 @@ mod tests {
             assert_eq!(account.total, 0);
             assert_eq!(account.held, 0);
             assert_eq!(account.locked, true);
+        }
+
+        Ok(())
+    }
+    
+    #[tokio::test]
+    async fn test_process_transaction_cant_withdraw_more_than_available() -> Result<()> {
+        let account_store = Arc::new(Mutex::new(InMemoryKVStore::<ClientID, Account>::new()?));
+
+        let tx_store = Arc::new(Mutex::new(
+            InMemoryKVStore::<TransactionID, Transaction>::new()?,
+        ));
+
+        let mut mgr = Manager::new(account_store.clone(), tx_store.clone());
+        
+        account_store.lock().await.set(1, Account {
+            id: 1,
+            available: 100,
+            total: 100,
+            held: 0,
+            locked: false,
+        })?;
+
+        // withdrawal
+        {
+            let tx = Transaction {
+                tx: 2,
+                client: 1,
+                type_: TxType::Withdrawal,
+                amount: Some(200),
+            };
+            tx_store.lock().await.set(2, tx.clone())?;
+
+            let res = mgr.process_transaction(tx).await;
+            assert!(res.is_err());
+
+            let store = account_store.lock().await;
+            let account = store.get(1)?;
+            assert_eq!(account.available, 100);
+            assert_eq!(account.total, 100);
+            assert_eq!(account.held, 0);
+            assert_eq!(account.locked, false);
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_process_transaction_cant_withdraw_when_account_is_locked() -> Result<()> {
+        let account_store = Arc::new(Mutex::new(InMemoryKVStore::<ClientID, Account>::new()?));
+
+        let tx_store = Arc::new(Mutex::new(
+            InMemoryKVStore::<TransactionID, Transaction>::new()?,
+        ));
+
+        let mut mgr = Manager::new(account_store.clone(), tx_store.clone());
+        
+        account_store.lock().await.set(1, Account {
+            id: 1,
+            available: 100,
+            total: 100,
+            held: 0,
+            locked: true,
+        })?;
+
+        // withdrawal
+        {
+            let tx = Transaction {
+                tx: 2,
+                client: 1,
+                type_: TxType::Withdrawal,
+                amount: Some(100),
+            };
+            tx_store.lock().await.set(2, tx.clone())?;
+
+            let res = mgr.process_transaction(tx).await;
+            assert!(res.is_err());
+
+            let store = account_store.lock().await;
+            let account = store.get(1)?;
+            assert_eq!(account.available, 100);
+            assert_eq!(account.total, 100);
+            assert_eq!(account.held, 0);
+            assert_eq!(account.locked, true);
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_process_transaction_dispute_on_deposit_holds_back_no_more_than_available() -> Result<()> {
+        let account_store = Arc::new(Mutex::new(InMemoryKVStore::<ClientID, Account>::new()?));
+
+        let tx_store = Arc::new(Mutex::new(
+            InMemoryKVStore::<TransactionID, Transaction>::new()?,
+        ));
+
+        let mut mgr = Manager::new(account_store.clone(), tx_store.clone());
+        
+        account_store.lock().await.set(1, Account {
+            id: 1,
+            available: 50,
+            total: 50,
+            held: 0,
+            locked: false,
+        })?;
+
+        tx_store.lock().await.set(1, Transaction {
+            tx: 1,
+            client: 1,
+            type_: TxType::Deposit,
+            amount: Some(100),
+        })?;
+
+        // dispute
+        {
+            let tx = Transaction {
+                tx: 1,
+                client: 1,
+                type_: TxType::Dispute,
+                amount: None,
+            };
+
+            mgr.process_transaction(tx).await?;
+
+            let store = account_store.lock().await;
+            let account = store.get(1)?;
+            assert_eq!(account.available, 0);
+            assert_eq!(account.total, 50);
+            assert_eq!(account.held, 50);
+            assert_eq!(account.locked, false);
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_process_transaction_dispute_on_withdrawal_doesnt_hold_back_anything() -> Result<()> {
+        let account_store = Arc::new(Mutex::new(InMemoryKVStore::<ClientID, Account>::new()?));
+
+        let tx_store = Arc::new(Mutex::new(
+            InMemoryKVStore::<TransactionID, Transaction>::new()?,
+        ));
+
+        let mut mgr = Manager::new(account_store.clone(), tx_store.clone());
+        
+        account_store.lock().await.set(1, Account {
+            id: 1,
+            available: 50,
+            total: 50,
+            held: 0,
+            locked: false,
+        })?;
+
+        tx_store.lock().await.set(1, Transaction {
+            tx: 1,
+            client: 1,
+            type_: TxType::Withdrawal,
+            amount: Some(100),
+        })?;
+
+        // dispute
+        {
+            let tx = Transaction {
+                tx: 1,
+                client: 1,
+                type_: TxType::Dispute,
+                amount: None,
+            };
+
+            mgr.process_transaction(tx).await?;
+
+            let store = account_store.lock().await;
+            let account = store.get(1)?;
+            assert_eq!(account.available, 50);
+            assert_eq!(account.total, 50);
+            assert_eq!(account.held, 0);
+            assert_eq!(account.locked, false);
         }
 
         Ok(())
