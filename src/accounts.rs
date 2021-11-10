@@ -146,12 +146,12 @@ where
 }
 
 mod tests {
-    use super::*;
 
-    use crate::InMemoryKVStore;
-    
     #[tokio::test]
-    async fn test_process_transaction_basic() -> Result<()> {
+    async fn test_process_transaction_basic() -> Result<(), crate::error::Error> {
+        use super::*;
+        use crate::storage::InMemoryKVStore;
+    
         let account_store = Arc::new(Mutex::new(InMemoryKVStore::<ClientID, Account>::new()?));
         let tx_store = Arc::new(Mutex::new(
             InMemoryKVStore::<TransactionID, Transaction>::new()?,
