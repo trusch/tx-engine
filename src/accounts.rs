@@ -279,7 +279,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_process_transaction_cant_withdraw_more_than_available() -> Result<()> {
+    async fn test_process_transaction_cant_withdraw_more_than_available() -> Result<(), crate::error::Error> {
+        use super::*;
+        use crate::storage::InMemoryKVStore;
+
         let account_store = Arc::new(Mutex::new(InMemoryKVStore::<ClientID, Account>::new()?));
 
         let tx_store = Arc::new(Mutex::new(
@@ -324,7 +327,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_process_transaction_cant_withdraw_when_account_is_locked() -> Result<()> {
+    async fn test_process_transaction_cant_withdraw_when_account_is_locked() -> Result<(), crate::error::Error> {
+        use super::*;
+        use crate::storage::InMemoryKVStore;
+
         let account_store = Arc::new(Mutex::new(InMemoryKVStore::<ClientID, Account>::new()?));
 
         let tx_store = Arc::new(Mutex::new(
@@ -370,7 +376,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_process_transaction_dispute_on_deposit_holds_back_no_more_than_available(
-    ) -> Result<()> {
+    ) -> Result<(), crate::error::Error> {
+        use super::*;
+        use crate::storage::InMemoryKVStore;
+
         let account_store = Arc::new(Mutex::new(InMemoryKVStore::<ClientID, Account>::new()?));
 
         let tx_store = Arc::new(Mutex::new(
@@ -423,8 +432,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_process_transaction_dispute_on_withdrawal_doesnt_hold_back_anything() -> Result<()>
+    async fn test_process_transaction_dispute_on_withdrawal_doesnt_hold_back_anything() -> Result<(), crate::error::Error>
     {
+        use super::*;
+        use crate::storage::InMemoryKVStore;
+
         let account_store = Arc::new(Mutex::new(InMemoryKVStore::<ClientID, Account>::new()?));
 
         let tx_store = Arc::new(Mutex::new(
