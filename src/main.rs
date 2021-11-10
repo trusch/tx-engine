@@ -20,9 +20,8 @@ mod accounts;
 use accounts::Manager as AccountManager;
 
 // main entry point of the application
-// using flavor current_thread or otherwise forcing single thread execution would result in a deadlock because of the project design
-// note that this is the default configuration for tokio, I just made it explicit here to mark as an requirement for execution.
-#[tokio::main(flavor = "multi_thread")]
+// using flavor current_thread or otherwise forcing single thread execution (like running this on a machine with only one cpu) would result in a deadlock because of the project design
+#[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> Result<()> {
     // Get the command line arguments
     let args: Vec<String> = env::args().collect();
